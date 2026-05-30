@@ -35,7 +35,7 @@ int MiniMax::eval_ctx(
     // return the score for a winning terminal state
     // Hint: prefer faster wins by using ply.
     if (state->game_state == WIN){
-        return 1000000 - ply;
+        return P_MAX - ply;
     }
 
     if(state->game_state == DRAW){
