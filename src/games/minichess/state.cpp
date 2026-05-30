@@ -139,9 +139,11 @@ int State::evaluate(
                 int self_p = self_board[i][j];
                 int oppn_p = oppn_board[i][j];
                 
-                if (self_p > oppn_p){
+                if (self_p > 0){
                     self_score += simple_material[self_p];
-                    oppn_score += simple_material[oppn_score];
+                }
+                if (oppn_p > 0){
+                    oppn_score += simple_material[oppn_p];
                 }
             }
         }
@@ -156,7 +158,7 @@ int State::evaluate(
         // bonus += 2 * (self_mobility - oppn_mobility);
         int self_mobility = this->legal_actions.size();
         //in case for speed, bonus += 2*self_mobility; only
-
+        
         // generate a "null state" to get the opponent's legal moves
         // cast it to State* because create_null_state returns a BaseState*
         State* oppn_state = static_cast<State*>(this->create_null_state());
@@ -414,6 +416,7 @@ void State::get_legal_actions_naive(){
                                 }
                             }
                         }
+                        break;
                     case 6: //king
                         for(auto move: move_table_king){
                             int p[2] = {move[0] + i, move[1] + j};

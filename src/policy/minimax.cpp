@@ -145,6 +145,7 @@ SearchResult MiniMax::search(
     // update result and return
         result.score = best_score;
         result.nodes = ctx.nodes;
+        result.pv = {result.best_move};
         return result;
 } 
 
