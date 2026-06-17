@@ -61,7 +61,7 @@ int MiniMax::eval_ctx(
 
     /* === Negamax loop === */
     int best_score = M_MAX;
-
+    bool first_move = true; //for pvs, using the first branch of each node as an anchor
 
     for(auto& action : state->legal_actions){
         // [ Hackathon TODO 3-2 ]
@@ -73,14 +73,35 @@ int MiniMax::eval_ctx(
         // [Hackathon TODO 3-3]
         // search the child one level deeper
         int raw_score;
-        if (same) {
-            // If the player doesn't change, pass alpha and beta normally
-            raw_score = eval_ctx(next, depth - 1, alpha, beta, history, ply + 1, ctx, p);
+        // Here we start implement the PVS
+        if (first_move){
+            // run the same alpha-beta pruning in first move
+            if (same) {
+                // If the player doesn't change, pass alpha and beta normally
+                raw_score = eval_ctx(next, depth - 1, alpha, beta, history, ply + 1, ctx, p);
+            } else {
+                // Negamax: If it's the opponent's turn, flip and negate the bounds
+                raw_score = eval_ctx(next, depth - 1, -beta, -alpha, history, ply + 1, ctx, p);
+            }
         } else {
-            // Negamax: If it's the opponent's turn, flip and negate the bounds!
-            raw_score = eval_ctx(next, depth - 1, -beta, -alpha, history, ply + 1, ctx, p);
+            // for other branches, we just use a null window of alpha and alpha + 1 to just see if this branch score is bigger than alpha
+            if (same) {
+                raw_score = eval_ctx(next, depth - 1, alpha, alpha + 1, history, ply + 1, ctx, p);
+            } else {
+                raw_score = eval_ctx(next, depth - 1, -(alpha + 1), -alpha, history, ply + 1, ctx, p);
+            }
+            // convert to current perspective to check if we need to research
+            int score = same ? raw_score : -raw_score;
+            //if the score is good and still lower than beta, research again with score as alpha
+            if (score > alpha && score < beta){
+                if (same) {
+                    raw_score = eval_ctx(next, depth - 1, score, beta, history, ply + 1, ctx, p);
+                } else {
+                    raw_score = eval_ctx(next, depth - 1, -beta, -score, history, ply + 1, ctx, p);
+                }
+            }
         }
-
+        
 
         // [Hackathon TODO 3-4]
         // convert raw to the current player's perspective.
@@ -98,6 +119,10 @@ int MiniMax::eval_ctx(
         if (alpha >= beta) {
             break;
         }
+
+
+        //so that we start quick-check the other branches
+        first_move = false;
     }
 
     history.pop(state->hash());
@@ -132,6 +157,8 @@ SearchResult MiniMax::search(
     int beta = P_MAX;
     int move_index = 0;
     int total_moves = (int)state->legal_actions.size();
+    //same as eval_ctx
+    bool first_move = true;
 
     for(auto& action : state->legal_actions){
         /* [ Hackathon TODO 4-1 ]
@@ -142,11 +169,33 @@ SearchResult MiniMax::search(
 
             // change from todo 3, ply + 1 to just 1 since we looks at the first move first
             int raw_score;
+            if (first_move){
+            // run the same alpha-beta pruning in first move
             if (same) {
+                // If the player doesn't change, pass alpha and beta normally
                 raw_score = eval_ctx(next, depth - 1, alpha, beta, history, 1, ctx, p);
             } else {
+                // Negamax: If it's the opponent's turn, flip and negate the bounds
                 raw_score = eval_ctx(next, depth - 1, -beta, -alpha, history, 1, ctx, p);
             }
+        } else {
+            // for other branches, we just use a null window of alpha and alpha + 1 to just see if this branch score is bigger than alpha
+            if (same) {
+                raw_score = eval_ctx(next, depth - 1, alpha, alpha + 1, history, 1, ctx, p);
+            } else {
+                raw_score = eval_ctx(next, depth - 1, -(alpha + 1), -alpha, history, 1, ctx, p);
+            }
+            // convert to current perspective to check if we need to research
+            int score = same ? raw_score : -raw_score;
+            //if the score is good and still lower than beta, research again with score as alpha
+            if (score > alpha && score < beta){
+                if (same) {
+                    raw_score = eval_ctx(next, depth - 1, score, beta, history, 1, ctx, p);
+                } else {
+                    raw_score = eval_ctx(next, depth - 1, -beta, -score, history, 1, ctx, p);
+                }
+            }
+        }
 
 
             int score = same?raw_score:-raw_score;
@@ -167,6 +216,8 @@ SearchResult MiniMax::search(
                 alpha = best_score;
             }
         move_index++;
+
+        first_move = false;
     }
 
     // [ Hackathon TODO 4-3 ]
