@@ -1,6 +1,6 @@
 #include <utility>
 #include "state.hpp"
-#include "minimax.hpp"
+#include "alphabeta.hpp"
 
 
 /*============================================================
@@ -8,7 +8,7 @@
  *
  * Negamax without pruning. Caller manages memory.
  *============================================================*/
-int MiniMax::eval_ctx(
+int AlphaBeta::eval_ctx(
     State *state,
     int depth,
     int alpha,
@@ -110,7 +110,7 @@ int MiniMax::eval_ctx(
  *
  * Iterate legal moves, call eval_ctx, return SearchResult.
  *============================================================*/
-SearchResult MiniMax::search(
+SearchResult AlphaBeta::search(
     State *state,
     int depth,
     GameHistory& history,
@@ -181,7 +181,7 @@ SearchResult MiniMax::search(
 /*============================================================
  * MiniMax — default_params / param_defs
  *============================================================*/
-ParamMap MiniMax::default_params(){
+ParamMap AlphaBeta::default_params(){
     return {
         {"UseKPEval", "true"},
         {"UseEvalMobility", "true"},
@@ -189,7 +189,7 @@ ParamMap MiniMax::default_params(){
     };
 }
 
-std::vector<ParamDef> MiniMax::param_defs(){
+std::vector<ParamDef> AlphaBeta::param_defs(){
     return {
         {"UseKPEval", ParamDef::CHECK, "true"},
         {"UseEvalMobility", ParamDef::CHECK, "true"},
