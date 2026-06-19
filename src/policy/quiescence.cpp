@@ -1,15 +1,15 @@
 #include <utility>
 #include <algorithm>
 #include "state.hpp"
-#include "minimax.hpp"
+#include "quiescence.hpp"
 
 
 /*============================================================
- * MiniMax — eval_ctx
+ * quiescene — eval_ctx
  *
  * Negamax without pruning. Caller manages memory.
  *============================================================*/
-int MiniMax::eval_ctx(
+int quiescene::eval_ctx(
     State *state,
     int depth,
     int alpha,
@@ -31,7 +31,6 @@ int MiniMax::eval_ctx(
     if(state->legal_actions.empty() && state->game_state == UNKNOWN){
         state->get_legal_actions();
     }
-
 
     /* === Terminal / leaf checks === */
 
@@ -62,6 +61,7 @@ int MiniMax::eval_ctx(
         return score;
     }
 
+
     int oppn = 1 -state->player;
 
     //reordering the actions base on most valuable victim - least valuable attacker
@@ -87,6 +87,7 @@ int MiniMax::eval_ctx(
     });
 
 
+    
     /* === Negamax loop === */
     int best_score = M_MAX;
     bool first_move = true; //for pvs, using the first branch of each node as an anchor
@@ -158,7 +159,7 @@ int MiniMax::eval_ctx(
 }
 
 
-int MiniMax::quiescence_search(
+int quiescene::quiescence_search(
     State *state, 
     int alpha, 
     int beta, 
@@ -266,22 +267,20 @@ int MiniMax::quiescence_search(
 
 
 /*============================================================
- * MiniMax — search
+ * quiescene — search
  *
  * Iterate legal moves, call eval_ctx, return SearchResult.
  *============================================================*/
-SearchResult MiniMax::search(
+SearchResult quiescene::search(
     State *state,
     int depth,
     GameHistory& history,
     SearchContext& ctx
 ){
-    (void) depth;
-
     ctx.reset();
     MMParams p = MMParams::from_map(ctx.params);
     SearchResult result;
-    result.depth = 1;
+    result.depth = depth;
 
     if(!state->legal_actions.size()){
         state->get_legal_actions();
@@ -310,23 +309,18 @@ SearchResult MiniMax::search(
         return score1 > score2;
     });
 
-
-    //implement iterative deepening
+    int best_score = M_MAX - 10;
+    // alpha_beta pruning
+    int alpha = M_MAX;
+    int beta = P_MAX;
+    int move_index = 0;
     int total_moves = (int)state->legal_actions.size();
-    if (total_moves == 0) return result;
-    
-    for (int current_depth = 1; current_depth<=100; current_depth++){
-        int best_score = M_MAX - 10;
-        // alpha_beta pruning
-        int alpha = M_MAX;
-        int beta = P_MAX;
-        int move_index = 0;
-        bool first_move = true;
-        SearchResult current_depth_result; //temporary result of this loop
+    //same as eval_ctx
+    bool first_move = true;
 
-        for(auto& action : state->legal_actions){
-            /* [ Hackathon TODO 4-1 ]
-            * search this move like TODO 3, but starting from the root */
+    for(auto& action : state->legal_actions){
+        /* [ Hackathon TODO 4-1 ]
+         * search this move like TODO 3, but starting from the root */
             State* next = state->next_state(action);
 
             bool same = next->same_player_as_parent();
@@ -337,80 +331,66 @@ SearchResult MiniMax::search(
             // run the same alpha-beta pruning in first move
             if (same) {
                 // If the player doesn't change, pass alpha and beta normally
-                raw_score = eval_ctx(next, current_depth - 1, alpha, beta, history, 1, ctx, p);
+                raw_score = eval_ctx(next, depth - 1, alpha, beta, history, 1, ctx, p);
             } else {
                 // Negamax: If it's the opponent's turn, flip and negate the bounds
-                raw_score = eval_ctx(next, current_depth - 1, -beta, -alpha, history, 1, ctx, p);
+                raw_score = eval_ctx(next, depth - 1, -beta, -alpha, history, 1, ctx, p);
             }
+        } else {
+            // for other branches, we just use a null window of alpha and alpha + 1 to just see if this branch score is bigger than alpha
+            if (same) {
+                raw_score = eval_ctx(next, depth - 1, alpha, alpha + 1, history, 1, ctx, p);
             } else {
-                // for other branches, we just use a null window of alpha and alpha + 1 to just see if this branch score is bigger than alpha
+                raw_score = eval_ctx(next, depth - 1, -(alpha + 1), -alpha, history, 1, ctx, p);
+            }
+            // convert to current perspective to check if we need to research
+            int score = same ? raw_score : -raw_score;
+            //if the score is good and still lower than beta, research again with score as alpha
+            if (score > alpha && score < beta){
                 if (same) {
-                    raw_score = eval_ctx(next, current_depth - 1, alpha, alpha + 1, history, 1, ctx, p);
+                    raw_score = eval_ctx(next, depth - 1, score, beta, history, 1, ctx, p);
                 } else {
-                    raw_score = eval_ctx(next, current_depth - 1, -(alpha + 1), -alpha, history, 1, ctx, p);
-                }
-                // convert to current perspective to check if we need to research
-                int score = same ? raw_score : -raw_score;
-                //if the score is good and still lower than beta, research again with score as alpha
-                if (score > alpha && score < beta){
-                    if (same) {
-                        raw_score = eval_ctx(next, current_depth - 1, score, beta, history, 1, ctx, p);
-                    } else {
-                        raw_score = eval_ctx(next, current_depth - 1, -beta, -score, history, 1, ctx, p);
-                    }
+                    raw_score = eval_ctx(next, depth - 1, -beta, -score, history, 1, ctx, p);
                 }
             }
+        }
 
 
             int score = same?raw_score:-raw_score;
             delete next;
-            if (ctx.stop) break;
 
             if(score > best_score){
                 // [ Hackathon TODO 4-2 ]
                 // keep this move if it is the best so far
                 best_score =  score;
-                current_depth_result.best_move = action;
-                current_depth_result.score = best_score;
-                current_depth_result.nodes = ctx.nodes;
-                current_depth_result.pv = {action};
+                result.best_move = action;
 
                 if(p.report_partial && ctx.on_root_update){
-                ctx.on_root_update({action, best_score, current_depth, move_index + 1, total_moves});
+                   ctx.on_root_update({result.best_move, best_score, depth, move_index + 1, total_moves});
                 }
             }  
             //update alpha at the root level so next moves benefit from pruning
             if (best_score > alpha) {
                 alpha = best_score;
             }
-            move_index++;
+        move_index++;
 
-            first_move = false;
-        }
-        if (ctx.stop) break; //if run out of time
-
-        //update final result
-        result = current_depth_result; 
-        result.depth = current_depth;
-
-        //push the best move to the head of the list for next depth
-        if (result.best_move != state->legal_actions[0]){
-            auto it = std::find(state->legal_actions.begin(), state->legal_actions.end(), result.best_move);
-            if (it != state->legal_actions.end()){
-                std::rotate(state->legal_actions.begin(), it, it + 1);
-            }
-        }
-
-        if (best_score >= P_MAX - 10) break; //already find the checkmate
+        first_move = false;
     }
+
+    // [ Hackathon TODO 4-3 ]
+    // update result and return
+        result.score = best_score;
+        result.nodes = ctx.nodes;
+        result.pv = {result.best_move};
         return result;
 } 
 
 
 /*============================================================
- * MiniMax — default_params / param_defs
+ * quiescene — default_params / param_defs
  *============================================================*/
-ParamMap MiniMax::default_params(){
+ParamMap quiescene::default_params(){
     return {
         {"UseKPEval", "true"},
         {"UseEvalMobility", "true"},
@@ -418,7 +398,7 @@ ParamMap MiniMax::default_params(){
     };
 }
 
-std::vector<ParamDef> MiniMax::param_defs(){
+std::vector<ParamDef> quiescene::param_defs(){
     return {
         {"UseKPEval", ParamDef::CHECK, "true"},
         {"UseEvalMobility", ParamDef::CHECK, "true"},
