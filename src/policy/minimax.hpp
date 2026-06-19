@@ -15,6 +15,21 @@ struct MMParams {
         return p;
     }
 };
+// add tranposition table
+
+enum TTFlag{
+    TT_exact,  //AI have reach the end of the branch and return the exact point
+    TT_lowerbound,    // beta cutoff, oppn will not let a good point > beta happen, keep the minimum pts (min = beta)
+    TT_uppderbound    //  all the move is worse than alpha, save the maximum (worst = alpha)
+};
+
+struct TTEntry{
+    uint64_t key = 0;   // Zobrist Hash code
+    int depth = -1;     // Depth that has been checked
+    int score = 0;      // Best score
+    Move best_move;     // Best move
+    TTFlag flag;        // flag to know the pts
+};
 
 class MiniMax{
 public:

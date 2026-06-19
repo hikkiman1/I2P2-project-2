@@ -3,6 +3,10 @@
 #include "state.hpp"
 #include "minimax.hpp"
 
+// create a note so that we can look up the move we did using the tranposition table
+const int TT_SIZE = 1 << 20;
+TTEntry TT[TT_SIZE];
+
 
 /*============================================================
  * MiniMax — eval_ctx
@@ -53,6 +57,37 @@ int MiniMax::eval_ctx(
     }
     history.push(state->hash());
     
+    // Check the transposition table
+    int alpha_ori = alpha;  // save the original alpha so that we can check which type of flag it is
+    uint64_t hash_key = state->hash();
+    int tt_index = hash_key & (TT_SIZE - 1); // using bitwise to find the idx in array
+    TTEntry& tte = TT[tt_index];
+
+    Move tt_best_move;
+    bool has_tt_move = false;
+
+    //check if it got the same hash code
+    if (tte.key == hash_key){
+        has_tt_move = true;
+        tt_best_move = tte.best_move; // get the best move first
+        // only use past move if their depth is same or higher
+        if (tte.depth >= depth){
+            if (tte.flag == TT_exact){
+                history.pop(state->hash());
+                return tte.score;
+            } else if (tte.flag == TT_lowerbound){
+                alpha = std::max(alpha, tte.score);
+            } else if (tte.flag == TT_uppderbound){
+                beta = std::min(beta, tte.score);
+            }
+            if (alpha >= beta){
+                history.pop(state->hash());
+                return tte.score; // alpha-beta pruning logic
+            }
+        }
+    }
+
+
     //now when we reach depth = 0, before we stop, we check the capture moves to avoid horizon effect
     if(depth <= 0){
         int score = quiescence_search(
@@ -68,6 +103,12 @@ int MiniMax::eval_ctx(
     int self = state->player;
 
     std::sort(state->legal_actions.begin(), state->legal_actions.end(), [&](const Move& m1, const Move& m2){
+        //we priotize the move we got from the transposition table
+        if (has_tt_move){
+            if (m1 == tt_best_move) return true;
+            if (m2 == tt_best_move) return false;
+        }
+
         //evaluate move 1
         int atk1 = state->board.board[self][m1.first.first][m1.first.second];
         int vic1 = state->board.board[oppn][m1.second.first][m1.second.second];
@@ -89,6 +130,7 @@ int MiniMax::eval_ctx(
 
     /* === Negamax loop === */
     int best_score = M_MAX;
+    Move best_move_in_node; //to save best move in node to save into our transposition table
     bool first_move = true; //for pvs, using the first branch of each node as an anchor
 
     for(auto& action : state->legal_actions){
@@ -140,6 +182,7 @@ int MiniMax::eval_ctx(
         // update best_score if this child is better.
         if (score > best_score){
             best_score = score;
+            best_move_in_node = action; // update best move for TT
         }
         if (best_score > alpha){
             alpha = best_score;
@@ -148,10 +191,26 @@ int MiniMax::eval_ctx(
             break;
         }
 
-
         //so that we start quick-check the other branches
         first_move = false;
     }
+
+    // put it into our TT
+    TTFlag flag;
+    if (best_score <= alpha_ori){
+        flag = TT_uppderbound;
+    } else if (best_score >= beta){
+        flag = TT_lowerbound;
+    } else {
+        flag = TT_exact;
+    }
+
+    //overwrite the old info in TT
+    tte.key = hash_key;
+    tte.depth = depth;
+    tte.score = best_score;
+    tte.best_move = best_move_in_node;
+    tte.flag = flag;
 
     history.pop(state->hash());
     return best_score;
@@ -315,7 +374,8 @@ SearchResult MiniMax::search(
     int total_moves = (int)state->legal_actions.size();
     if (total_moves == 0) return result;
     
-    for (int current_depth = 1; current_depth<=100; current_depth++){
+    int current_depth = 1;
+    while (!ctx.stop){
         int best_score = M_MAX - 10;
         // alpha_beta pruning
         int alpha = M_MAX;
@@ -364,7 +424,7 @@ SearchResult MiniMax::search(
 
             int score = same?raw_score:-raw_score;
             delete next;
-            if (ctx.stop) break;
+            if (ctx.stop) break; //if run out of time
 
             if(score > best_score){
                 // [ Hackathon TODO 4-2 ]
@@ -402,6 +462,8 @@ SearchResult MiniMax::search(
         }
 
         if (best_score >= P_MAX - 10) break; //already find the checkmate
+
+        current_depth++;
     }
         return result;
 } 
