@@ -10,6 +10,9 @@ TTEntry TT[TT_SIZE];
 // implement killer move, 2 killer moves, maximum of 100 depths
 Move killer_moves[100][2];
 
+// implement history heuristic
+int history_table[2][6][5][6][5] = {0};
+
 /*============================================================
  * MiniMax — eval_ctx
  *
@@ -60,7 +63,6 @@ int MiniMax::eval_ctx(
     history.push(state->hash());
     
     // Check the transposition table
-    int alpha_ori = alpha;  // save the original alpha so that we can check which type of flag it is
     uint64_t hash_key = state->hash();
     int tt_index = hash_key & (TT_SIZE - 1); // using bitwise to find the idx in array
     TTEntry& tte = TT[tt_index];
@@ -88,6 +90,7 @@ int MiniMax::eval_ctx(
             }
         }
     }
+    int alpha_ori = alpha;  // save the original alpha so that we can check which type of flag it is
 
 
     //now when we reach depth = 0, before we stop, we check the capture moves to avoid horizon effect
@@ -130,6 +133,14 @@ int MiniMax::eval_ctx(
         int score2 = 0;
         if (vic2 > 0){
             score2 = PIECE_VALUES[vic2] * 10 - PIECE_VALUES[atk2];
+        }
+
+        // history heuristic
+        // if both are not capture move, evaluate by history score
+        if (score1 == 0 && score2 == 0) {
+            int hist1 = history_table[self][m1.first.first][m1.first.second][m1.second.first][m1.second.second];
+            int hist2 = history_table[self][m2.first.first][m2.first.second][m2.second.first][m2.second.second];
+            return hist1 > hist2;
         }
 
         return score1 > score2;
@@ -203,6 +214,8 @@ int MiniMax::eval_ctx(
                     killer_moves[ply][1] = killer_moves[ply][0];
                     killer_moves[ply][0] = action;
                 }
+                //update history table
+                history_table[self][action.first.first][action.first.second][action.second.first][action.second.second] += depth * depth;
             }
             break;
         }
@@ -353,6 +366,8 @@ SearchResult MiniMax::search(
 ){
     (void) depth;
 
+    // reset history before iterative deepening loop
+    std::fill(&history_table[0][0][0][0][0], &history_table[0][0][0][0][0] + sizeof(history_table) / sizeof(int), 0);
     ctx.reset();
     MMParams p = MMParams::from_map(ctx.params);
     SearchResult result;
