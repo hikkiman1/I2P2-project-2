@@ -197,7 +197,7 @@ int MiniMax::eval_ctx(
         } 
         if (alpha >= beta) {
             // (killer move) if a move make pruning and it is not a capture moves, we save it
-            if (state->board.board[oppn][action.second.first][action.second.second]){
+            if (state->board.board[oppn][action.second.first][action.second.second] == 0){
                 // push old killer to 2nd pos, new killer to 1st pos
                 if (action!=killer_moves[ply][0]){
                     killer_moves[ply][1] = killer_moves[ply][0];
