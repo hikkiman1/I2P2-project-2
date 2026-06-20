@@ -7,6 +7,8 @@
 const int TT_SIZE = 1 << 20;
 TTEntry TT[TT_SIZE];
 
+// implement killer move, 2 killer moves, maximum of 100 depths
+Move killer_moves[100][2];
 
 /*============================================================
  * MiniMax — eval_ctx
@@ -108,6 +110,12 @@ int MiniMax::eval_ctx(
             if (m1 == tt_best_move) return true;
             if (m2 == tt_best_move) return false;
         }
+        //2nd priotize the killer move
+        bool m1_is_killer = (m1 == killer_moves[ply][0] || m1 == killer_moves[ply][1]);
+        bool m2_is_killer = (m2 == killer_moves[ply][0] || m2 == killer_moves[ply][1]);
+        if (m1_is_killer && !m2_is_killer) return true;
+        if (m2_is_killer && !m1_is_killer) return false;
+
 
         //evaluate move 1
         int atk1 = state->board.board[self][m1.first.first][m1.first.second];
@@ -188,6 +196,14 @@ int MiniMax::eval_ctx(
             alpha = best_score;
         } 
         if (alpha >= beta) {
+            // (killer move) if a move make pruning and it is not a capture moves, we save it
+            if (state->board.board[oppn][action.second.first][action.second.second]){
+                // push old killer to 2nd pos, new killer to 1st pos
+                if (action!=killer_moves[ply][0]){
+                    killer_moves[ply][1] = killer_moves[ply][0];
+                    killer_moves[ply][0] = action;
+                }
+            }
             break;
         }
 
