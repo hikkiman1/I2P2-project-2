@@ -61,7 +61,8 @@ int MiniMax::eval_ctx(
         return rep_score;
     }
     history.push(state->hash());
-    
+
+    int alpha_ori = alpha;  // save the original alpha so that we can check which type of flag it is
     // Check the transposition table
     uint64_t hash_key = state->hash();
     int tt_index = hash_key & (TT_SIZE - 1); // using bitwise to find the idx in array
@@ -90,7 +91,7 @@ int MiniMax::eval_ctx(
             }
         }
     }
-    int alpha_ori = alpha;  // save the original alpha so that we can check which type of flag it is
+    
 
 
     //now when we reach depth = 0, before we stop, we check the capture moves to avoid horizon effect
@@ -114,8 +115,13 @@ int MiniMax::eval_ctx(
             if (m2 == tt_best_move) return false;
         }
         //2nd priotize the killer move
-        bool m1_is_killer = (m1 == killer_moves[ply][0] || m1 == killer_moves[ply][1]);
-        bool m2_is_killer = (m2 == killer_moves[ply][0] || m2 == killer_moves[ply][1]);
+        bool m1_is_killer = false;
+        bool m2_is_killer = false;
+        // avoid segfault
+        if (ply < 100) {
+            m1_is_killer = (m1 == killer_moves[ply][0] || m1 == killer_moves[ply][1]);
+            m2_is_killer = (m2 == killer_moves[ply][0] || m2 == killer_moves[ply][1]);
+        }
         if (m1_is_killer && !m2_is_killer) return true;
         if (m2_is_killer && !m1_is_killer) return false;
 
@@ -210,12 +216,16 @@ int MiniMax::eval_ctx(
             // (killer move) if a move make pruning and it is not a capture moves, we save it
             if (state->board.board[oppn][action.second.first][action.second.second] == 0){
                 // push old killer to 2nd pos, new killer to 1st pos
-                if (action!=killer_moves[ply][0]){
-                    killer_moves[ply][1] = killer_moves[ply][0];
-                    killer_moves[ply][0] = action;
+                if (ply < 100) {
+                    if (action != killer_moves[ply][0]){
+                        killer_moves[ply][1] = killer_moves[ply][0];
+                        killer_moves[ply][0] = action;
+                    }
                 }
-                //update history table
-                history_table[self][action.first.first][action.first.second][action.second.first][action.second.second] += depth * depth;
+                //update history table, the if is for avoiding integer overflow
+                if (history_table[self][action.first.first][action.first.second][action.second.first][action.second.second] < 100000000) {
+                    history_table[self][action.first.first][action.first.second][action.second.first][action.second.second] += depth * depth;
+                }
             }
             break;
         }
@@ -280,10 +290,11 @@ int MiniMax::quiescence_search(
     int stand_pat = state->evaluate(p.use_kp_eval, p.use_eval_mobility, &history);
 
     if (stand_pat >= beta){
-        return beta;
+        return stand_pat;
         //stop since opponent sure gonna not let us choose this move
     } 
-    if (stand_pat > alpha){
+    int best_score = stand_pat; // track the best score globally
+    if (best_score > alpha){
         //update alpha if standing pat is better than our minimum guaranteed score
         alpha = stand_pat;
     }
@@ -339,15 +350,18 @@ int MiniMax::quiescence_search(
 
             delete next;
 
-            if (score >= beta){
-                return beta;
-            }
-            if (score > alpha){
-                alpha = score;
+            if (score > best_score) {
+                best_score = score;
+                if (best_score > alpha) {
+                    alpha = best_score;
+                }
+                if (alpha >= beta) {
+                    break; 
+                }
             }
         }
     }
-    return alpha;
+    return best_score;
 }
 
 
